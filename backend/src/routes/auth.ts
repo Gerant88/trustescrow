@@ -1,78 +1,77 @@
 import { Router, Request, Response } from 'express';
-import pool from '../db/db';
 import { v4 as uuidv4 } from 'uuid';
-
-declare global {
-  namespace Express {
-    interface Request {
-      session: any;
-    }
-  }
-}
+import { query } from '../db';
 
 const router = Router();
 
-// Get current user or redirect to login
-router.get('/me', async (req: Request, res: Response) => {
-  if (!req.session.userId) {
-    return res.status(401).json({ error: 'Not authenticated' });
-  }
-
-  try {
-    const result = await pool.query(
-      'SELECT id, username, honesty_score_seller, honesty_score_buyer, total_transactions FROM users WHERE id = $1',
-      [req.session.userId]
-    );
-    res.json(result.rows[0]);
-  } catch (err) {
-    res.status(500).json({ error: 'Database error' });
-  }
-});
-
-// Fake login - create user if doesn't exist
+// Fake login - just email
 router.post('/login', async (req: Request, res: Response) => {
-  const { username } = req.body;
-
-  if (!username || username.length < 3) {
-    return res.status(400).json({ error: 'Username must be at least 3 characters' });
-  }
-
   try {
-    let user = await pool.query('SELECT id FROM users WHERE username = $1', [username]);
-
-    if (user.rows.length === 0) {
-      // Create new user
-      const userId = uuidv4();
-      await pool.query(
-        'INSERT INTO users (id, username) VALUES ($1, $2)',
-        [userId, username]
-      );
-      req.session.userId = userId;
-    } else {
-      req.session.userId = user.rows[0].id;
+    const { email, name } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ error: 'Email required' });
     }
 
-    // Get user data
-    const userResult = await pool.query(
-      'SELECT id, username, honesty_score_seller, honesty_score_buyer, total_transactions FROM users WHERE id = $1',
-      [req.session.userId]
+    // Find or create user
+    const result = await query(
+      'SELECT id FROM users WHERE email = $1',
+      [email]
     );
 
-    res.json({ success: true, user: userResult.rows[0] });
-  } catch (err) {
-    console.error(err);
+    let userId: string;
+    if (result.rows.length > 0) {
+      userId = result.rows[0].id;
+    } else {
+      const newUserResult = await query(
+        'INSERT INTO users (email, name) VALUES ($1, $2) RETURNING id',
+        [email, name || email.split('@')[0]]
+      );
+      userId = newUserResult.rows[0].id;
+    }
+
+    // Set session
+    (req.session as any).userId = userId;
+    
+    res.json({ 
+      success: true, 
+      userId,
+      message: `Logged in as ${email}`
+    });
+  } catch (error) {
+    console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
   }
 });
 
-// Logout
 router.post('/logout', (req: Request, res: Response) => {
-  req.session.destroy((err) => {
-    if (err) {
-      return res.status(500).json({ error: 'Logout failed' });
-    }
+  req.session.destroy(() => {
     res.json({ success: true });
   });
+});
+
+router.get('/me', async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'Not logged in' });
+    }
+
+    const result = await query(
+      'SELECT id, email, name, buyer_score, seller_score FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Get user error:', error);
+    res.status(500).json({ error: 'Failed to get user' });
+  }
 });
 
 export default router;
