@@ -54,4 +54,24 @@ router.get('/stats', async (req: Request, res: Response) => {
   }
 });
 
+
+// added endpoint to create user (for testing purposes)
+router.post('/create', async (req: Request, res: Response) => {
+  const { email, name } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: 'Email required' });
+  }
+  try {
+    const result = await query(
+      'INSERT INTO users (email, name) VALUES ($1, $2) RETURNING id, email, name',
+      [email, name || email.split('@')[0]]
+    );
+    res.status(201).json({ user: result.rows[0] });
+  } catch (error) {
+    console.error('User creation error:', error);
+    res.status(500).json({ error: 'Failed to create user' });
+  }
+});
+
+
 export default router;
