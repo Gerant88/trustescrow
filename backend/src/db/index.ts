@@ -9,6 +9,9 @@ export const pool = new Pool({
   database: process.env.DB_NAME || 'trustescrow',
   user: process.env.DB_USER || 'trustescrow_user',
   password: process.env.DB_PASSWORD || 'dev_password',
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
 });
 
 export async function initDb() {
@@ -98,7 +101,36 @@ export async function initDb() {
       );
     `);
 
-    console.log('✅ Database schema initialized');
+    // Indexes for common query patterns
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_escrows_buyer_id ON escrows(buyer_id);
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_escrows_seller_id ON escrows(seller_id);
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_escrows_state ON escrows(state);
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_verifications_escrow_id ON verifications(escrow_id);
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_verifications_user_id ON verifications(user_id);
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_disputes_escrow_id ON disputes(escrow_id);
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_disputes_raised_by_id ON disputes(raised_by_id);
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_transaction_log_escrow_id ON transaction_log(escrow_id);
+    `);
+
+    console.log('✅ Database schema and indexes initialized');
   } finally {
     client.release();
   }
