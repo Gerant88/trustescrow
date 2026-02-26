@@ -1,18 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { useAuthStore } from '../store/authStore';
-import { escrowApi, userApi } from '../lib/api';
+import { escrowApi, userApi, authApi } from '../lib/api';
 
 export default function Dashboard() {
   const router = useRouter();
-  const { user } = useAuthStore();
+  const { user, setUser, isInitialized } = useAuthStore();
   const [escrows, setEscrows] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
+    if (!isInitialized) return;
     if (!user) {
-      router.push('/');
+      router.replace('/');
       return;
     }
 
@@ -21,32 +23,55 @@ export default function Dashboard() {
       userApi.stats(),
     ])
       .then(([escrowRes, statsRes]) => {
-        setEscrows(escrowRes.data);
+        setEscrows(escrowRes.data as any[]);
         setStats(statsRes.data);
       })
-      .catch((error) => {
-        console.error('Failed to load dashboard:', error);
-        alert('Failed to load dashboard');
+      .catch((err) => {
+        console.error('Failed to load dashboard:', err);
+        setError('Failed to load dashboard data. Please refresh the page.');
       })
       .finally(() => setLoading(false));
-  }, [user, router]);
+  }, [user, router, isInitialized]);
 
-  if (!user) return <div>Loading...</div>;
+  const handleLogout = async () => {
+    try {
+      await authApi.logout();
+      setUser(null);
+      router.push('/');
+    } catch {
+      router.push('/');
+    }
+  };
+
+  if (!isInitialized || (!user && !error)) {
+    return <div style={{ padding: '20px' }}>Loading...</div>;
+  }
   if (loading) return <div style={{ padding: '20px' }}>Loading dashboard...</div>;
+  if (error) {
+    return (
+      <div style={{ padding: '20px' }}>
+        <p style={{ color: 'red' }}>{error}</p>
+        <button onClick={() => router.reload()}>Retry</button>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: '20px', maxWidth: '1000px', margin: '0 auto' }}>
-      <h1>Dashboard</h1>
-      <p>Welcome, {user.name}!</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h1>Dashboard</h1>
+        <button onClick={handleLogout} style={{ padding: '8px 16px' }}>Logout</button>
+      </div>
+      <p>Welcome, {user!.name}!</p>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '30px' }}>
         <div style={{ border: '1px solid #ccc', padding: '15px' }}>
           <h3>Buyer Score</h3>
-          <p style={{ fontSize: '24px', fontWeight: 'bold' }}>{user.buyer_score}</p>
+          <p style={{ fontSize: '24px', fontWeight: 'bold' }}>{user!.buyer_score}</p>
         </div>
         <div style={{ border: '1px solid #ccc', padding: '15px' }}>
           <h3>Seller Score</h3>
-          <p style={{ fontSize: '24px', fontWeight: 'bold' }}>{user.seller_score}</p>
+          <p style={{ fontSize: '24px', fontWeight: 'bold' }}>{user!.seller_score}</p>
         </div>
       </div>
 

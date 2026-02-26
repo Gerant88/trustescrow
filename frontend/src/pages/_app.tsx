@@ -4,14 +4,20 @@ import { authApi } from '../lib/api';
 import '../styles/global.css';
 
 function MyApp({ Component, pageProps }: any) {
-  const { setUser } = useAuthStore();
+  const { setUser, setInitialized } = useAuthStore();
 
   useEffect(() => {
-    // Check if user is logged in on app load
     authApi.me()
-      .then((res) => setUser(res.data))
-      .catch(() => setUser(null));
-  }, [setUser]);
+      .then((res) => {
+        setUser(res.data);
+      })
+      .catch(() => {
+        setUser(null);
+      })
+      .finally(() => {
+        setInitialized(true);
+      });
+  }, [setUser, setInitialized]);
 
   return <Component {...pageProps} />;
 }

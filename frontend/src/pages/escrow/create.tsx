@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { useAuthStore } from '../../store/authStore';
 import { escrowApi } from '../../lib/api';
 
 export default function CreateEscrow() {
   const router = useRouter();
-  const { user } = useAuthStore();
+  const { user, isInitialized } = useAuthStore();
   const [formData, setFormData] = useState({
     itemName: '',
     itemValue: '',
@@ -15,6 +15,14 @@ export default function CreateEscrow() {
     expectedDeliveryWindow: '3-7 days',
   });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [shareLink, setShareLink] = useState('');
+
+  useEffect(() => {
+    if (isInitialized && !user) {
+      router.replace('/');
+    }
+  }, [isInitialized, user, router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -23,25 +31,36 @@ export default function CreateEscrow() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setError('');
 
+    const itemValue = parseFloat(formData.itemValue);
+    if (isNaN(itemValue) || itemValue < 100 || itemValue > 1_000_000) {
+      setError('Item value must be between ₱100 and ₱1,000,000');
+      return;
+    }
+    if (formData.itemName.trim().length === 0) {
+      setError('Item name is required');
+      return;
+    }
+
+    setLoading(true);
     try {
       const res = await escrowApi.create({
         ...formData,
-        itemValue: parseFloat(formData.itemValue),
+        itemValue,
       });
-
-      alert(`Escrow created! ID: ${res.data.escrowId}\n\nShare this link with the seller:\n${res.data.shareLink}`);
-      router.push('/dashboard');
-    } catch (error) {
-      console.error('Failed to create escrow:', error);
-      alert('Failed to create escrow');
+      setShareLink(res.data.shareLink);
+      setTimeout(() => router.push('/dashboard'), 3000);
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || 'Failed to create escrow';
+      setError(msg);
     } finally {
       setLoading(false);
     }
   };
 
-  if (!user) return <div>Please log in first</div>;
+  if (!isInitialized) return <div style={{ padding: '20px' }}>Loading...</div>;
+  if (!user) return null;
 
   return (
     <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto' }}>
@@ -51,6 +70,18 @@ export default function CreateEscrow() {
 
       <h1>Create New Escrow</h1>
       <p>You're the buyer. Fill in the item details below.</p>
+
+      {shareLink && (
+        <div style={{ backgroundColor: '#d4edda', padding: '15px', borderRadius: '5px', marginBottom: '15px' }}>
+          <p><strong>Escrow created!</strong> Share this link with your seller:</p>
+          <p><a href={shareLink}>{shareLink}</a></p>
+          <p><small>Redirecting to dashboard in 3 seconds...</small></p>
+        </div>
+      )}
+
+      {error && (
+        <p style={{ color: 'red', marginBottom: '10px' }}>{error}</p>
+      )}
 
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: '15px' }}>
@@ -77,11 +108,12 @@ export default function CreateEscrow() {
               onChange={handleChange}
               required
               min="100"
+              max="1000000"
               step="100"
               style={{ width: '100%', padding: '8px', marginTop: '5px' }}
             />
           </label>
-          <small>You'll deposit 2x this amount into escrow</small>
+          <small>Must be between ₱100 and ₱1,000,000. You'll deposit 2x this amount into escrow.</small>
         </div>
 
         <div style={{ marginBottom: '15px' }}>

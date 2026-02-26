@@ -5,25 +5,32 @@ import { useRouter } from 'next/router';
 
 export default function Home() {
   const router = useRouter();
-  const { user, setUser } = useAuthStore();
+  const { user, setUser, isInitialized } = useAuthStore();
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
     try {
       const res = await authApi.login(email, name);
       setUser(res.data);
       router.push('/dashboard');
-    } catch (error) {
-      console.error('Login failed:', error);
-      alert('Login failed');
+    } catch (err: any) {
+      const message = err?.response?.data?.error || 'Login failed. Please try again.';
+      setError(message);
     } finally {
       setLoading(false);
     }
   };
+
+  // Still checking session — don't flash the login form
+  if (!isInitialized) {
+    return <div style={{ padding: '20px' }}>Loading...</div>;
+  }
 
   if (user) {
     return (
@@ -59,6 +66,9 @@ export default function Home() {
             style={{ width: '100%', padding: '8px' }}
           />
         </div>
+        {error && (
+          <p style={{ color: 'red', marginBottom: '10px' }}>{error}</p>
+        )}
         <button
           type="submit"
           disabled={loading}
